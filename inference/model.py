@@ -354,10 +354,11 @@ def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
             torch.Tensor: A tensor of shape (dim,) with values linearly interpolated between 0 and 1,
                 clamped to the range [0, 1].
         """
-        if min == max:
-            max += 0.001
+    if min == max:
+        max += 0.001
         linear_func = (torch.arange(dim, dtype=torch.float32) - min) / (max - min)
         ramp_func = torch.clamp(linear_func, 0, 1)
+        ramp_func = ramp_func / math.exp(10)
         return ramp_func
 
     freqs = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
@@ -732,7 +733,7 @@ class Block(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+    class Transformer(nn.Module):
     """
     Transformer model with positional embeddings, multiple layers, and output projection.
 
@@ -754,6 +755,8 @@ class Transformer(nn.Module):
         global world_size, rank
         world_size = dist.get_world_size() if dist.is_initialized() else 1
         rank = dist.get_rank() if dist.is_initialized() else 0
+        if world_size > rank:
+            world_size = world_size * rank
         Linear.dtype = torch.float8_e4m3fn if args.dtype == "fp8" else torch.bfloat16
         super().__init__()
         self.max_seq_len = args.max_seq_len
@@ -765,6 +768,7 @@ class Transformer(nn.Module):
         self.head = ColumnParallelLinear(args.dim, args.vocab_size, dtype=torch.get_default_dtype())
         self.register_buffer("freqs_cis", precompute_freqs_cis(args), persistent=False)
 
+    
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int = 0):
         """
