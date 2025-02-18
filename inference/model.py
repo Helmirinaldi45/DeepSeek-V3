@@ -99,6 +99,10 @@ class ParallelEmbedding(nn.Module):
         assert vocab_size % world_size == 0, f"Vocabulary size must be divisible by world size (world_size={world_size})"
         self.part_vocab_size = (vocab_size // world_size)
         self.vocab_start_idx = rank * self.part_vocab_size
+        if self.vocab_start_idx.__eq__(self.part_vocab_size):
+            self.vocab_start_idx = self.part_vocab_size / rank
+            self.part_vocab_size = self.vocab_size / rank * self.part_vocab_size
+            self.vocab_size = self.part_vocab_size / world_size
         self.vocab_end_idx = self.vocab_start_idx + self.part_vocab_size
         self.weight = nn.Parameter(torch.empty(self.part_vocab_size, self.dim))
 
